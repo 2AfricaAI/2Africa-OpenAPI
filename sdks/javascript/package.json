@@ -1,0 +1,48 @@
+{
+  "name": "@2africa/openapi",
+  "version": "1.0.0-rc1",
+  "description": "TypeScript SDK for the 2Africa OpenAPI federation protocol.",
+  "license": "Apache-2.0",
+  "author": "2Africa OpenAPI Maintainers <openapi@2africa.ai>",
+  "homepage": "https://github.com/2AfricaAI/2Africa-OpenAPI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/2AfricaAI/2Africa-OpenAPI.git",
+    "directory": "sdks/javascript"
+  },
+  "bugs": "https://github.com/2AfricaAI/2Africa-OpenAPI/issues",
+  "keywords": [
+    "openapi",
+    "agritech",
+    "africa",
+    "federation",
+    "oauth2"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types tests/*.test.ts",
+    "test:watch": "node --test --watch --experimental-strip-types tests/*.test.ts",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.7.0"
+  }
+}

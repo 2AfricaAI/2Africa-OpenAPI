@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Build + (optionally) publish the JS/TS SDK to npm under @2africa/openapi.
+#
+# Triggered by:
+#   - any tag matching `v*-js*` (e.g. v1.0.0-js-rc1)
+#   - manual workflow_dispatch (always dry-run)
+#
+# Publishing is gated on `PUBLISH_JS_SDK = 'true'` + secret `NPM_TOKEN`.
+
+name: SDK · JavaScript
+
+on:
+  push:
+    tags:
+      - 'v*-js*'
+      - 'v*-sdk-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+
+  build-test-publish:
+    name: Build, test, publish JS/TS SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/javascript
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Run tests
+        run: node --test --experimental-strip-types tests/*.test.ts
+
+      - name: Build dist/
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: twoafrica-openapi-js
+          path: |
+            sdks/javascript/dist/**
+            sdks/javascript/package.json
+            sdks/javascript/README.md
+
+      - name: Publish to npm
+        if: ${{ vars.PUBLISH_JS_SDK == 'true' && github.event_name == 'push' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
+
+      - name: Publish gate status
+        if: ${{ vars.PUBLISH_JS_SDK != 'true' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "::notice::Publish skipped (dry-run). To enable real publish:"
+          echo "::notice::  1. Set repository variable PUBLISH_JS_SDK=true"
+          echo "::notice::  2. Add repository secret NPM_TOKEN"
+          echo "::notice::  3. Push a tag matching v*-js* (e.g. v1.0.0-js-rc1)"

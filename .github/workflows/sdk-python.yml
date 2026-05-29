@@ -1,0 +1,81 @@
+# SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Build + (optionally) publish the Python SDK to PyPI.
+#
+# Triggered by:
+#   - any tag matching `v*-py*` (e.g. v1.0.0-py-rc1)  -> tries to publish
+#   - manual workflow_dispatch (always dry-run)
+#
+# Publishing is gated on the repository variable `PUBLISH_PYTHON_SDK = 'true'`
+# AND the secret `PYPI_API_TOKEN`. Until both are set, the workflow
+# builds wheel + sdist + runs tests but skips the upload step.
+
+name: SDK · Python
+
+on:
+  push:
+    tags:
+      - 'v*-py*'
+      - 'v*-sdk-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+
+  build-test-publish:
+    name: Build, test, publish Python SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdks/python
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine pytest pytest-mock requests
+
+      - name: Install SDK in editable mode
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: pytest tests/ -v
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Inspect dist/
+        run: |
+          ls -la dist/
+          twine check dist/*
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: twoafrica-openapi-python
+          path: sdks/python/dist/*
+
+      - name: Publish to PyPI
+        if: ${{ vars.PUBLISH_PYTHON_SDK == 'true' && github.event_name == 'push' }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: twine upload dist/*
+
+      - name: Publish gate status
+        if: ${{ vars.PUBLISH_PYTHON_SDK != 'true' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "::notice::Publish skipped (dry-run). To enable real publish:"
+          echo "::notice::  1. Set repository variable PUBLISH_PYTHON_SDK=true"
+          echo "::notice::  2. Add repository secret PYPI_API_TOKEN"
+          echo "::notice::  3. Push a tag matching v*-py* (e.g. v1.0.0-py-rc1)"
