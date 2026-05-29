@@ -78,6 +78,22 @@ paths:
                     status: ok
                     spec_version: 0.1.0-skeleton
                     server_time: '2026-05-29T14:30:00Z'
+        '503':
+          description: |
+            Server is unable to serve traffic. The body uses the
+            project-wide RFC 7807 Problem Details format.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                draining:
+                  summary: Server is draining for maintenance
+                  value:
+                    type: https://errors.2africa.ai/service-unavailable
+                    title: Service Unavailable
+                    status: 503
+                    detail: Server is draining; retry in 30 seconds.
 
 components:
   schemas:

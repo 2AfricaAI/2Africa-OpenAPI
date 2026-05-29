@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
 # SPDX-License-Identifier: CC-BY-4.0
 #
-# 2Africa OpenAPI — Webhook events (AgriCloud → AgriOS)
+# 2Africa OpenAPI - Webhook events (AgriCloud -> AgriOS)
 # Skeleton placeholder. Full event catalogue lands in Sprint 1.
 
 asyncapi: 2.6.0
@@ -10,26 +10,51 @@ info:
   title: 2Africa OpenAPI Webhooks
   version: 0.1.0-skeleton
   description: |
-    AgriCloud (or any conformant server) signs and POSTs event payloads
-    to subscribed AgriOS clients. Signature: `X-AgriCloud-Signature:
-    t=<unix>,v1=<hex>` (HMAC-SHA256 over `t.body`). Anti-replay window
-    5 minutes; retries 1m → 5m → 30m → 2h → 6h.
+    AgriCloud (or any conformant server) signs and POSTs event
+    payloads to subscribed AgriOS clients. Signature header
+    X-AgriCloud-Signature t=UNIX,v1=HEX uses HMAC-SHA256 over t.body.
+    Anti-replay window 5 minutes. Retry schedule: 1m, 5m, 30m, 2h, 6h.
+    Full event set lands in Sprint 1 (price.updated and friends).
+  contact:
+    name: 2Africa OpenAPI Maintainers
+    url: https://github.com/2AfricaAI/2Africa-OpenAPI
+    email: openapi@2africa.ai
+  license:
+    name: CC BY 4.0
+    url: https://creativecommons.org/licenses/by/4.0/
 
-    Sprint 1 fills in the full set of channels: price.updated,
-    benchmark.refreshed, marketplace.order.posted,
-    procurement.opportunity.opened, telemetry.config.changed.
+servers:
+  production:
+    url: api.agricloud.2africa.ai
+    protocol: https
+    description: Reference production server (AgriCloud).
+  sandbox:
+    url: sandbox.agricloud.2africa.ai
+    protocol: https
+    description: Reference sandbox (free, 7-day token renewal).
 
 defaultContentType: application/json
+
+tags:
+  - name: System
+    description: Operational events used during conformance testing.
 
 channels:
 
   system.healthcheck:
     description: |
-      Skeleton placeholder. A test event used to validate signature
-      verification end-to-end during conformance testing.
+      Test event used to validate signature verification end-to-end
+      during conformance testing. Real events arrive in Sprint 1.
     subscribe:
       operationId: receiveHealthcheck
       summary: Receive a health-check webhook.
+      description: |
+        Conformant receivers MUST verify the HMAC-SHA256 signature
+        in X-AgriCloud-Signature against the raw request body before
+        processing. Receivers MUST treat event_id as an idempotency
+        key.
+      tags:
+        - name: System
       message:
         $ref: '#/components/messages/HealthcheckEvent'
 
@@ -40,11 +65,15 @@ components:
     HealthcheckEvent:
       name: HealthcheckEvent
       title: Webhook health-check
+      summary: No-op event used to verify webhook delivery.
       contentType: application/json
       payload:
         type: object
         additionalProperties: false
-        required: [event_id, event_type, created_at]
+        required:
+          - event_id
+          - event_type
+          - created_at
         properties:
           event_id:
             type: string
@@ -56,10 +85,12 @@ components:
           created_at:
             type: string
             format: date-time
-            description: ISO 8601 UTC.
+            description: ISO 8601 UTC timestamp.
       headers:
         type: object
-        required: [X-AgriCloud-Signature, X-AgriCloud-Spec-Version]
+        required:
+          - X-AgriCloud-Signature
+          - X-AgriCloud-Spec-Version
         properties:
           X-AgriCloud-Signature:
             type: string
