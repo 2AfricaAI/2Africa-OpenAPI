@@ -1,28 +1,28 @@
 # SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
 # SPDX-License-Identifier: CC-BY-4.0
 #
-# 2Africa OpenAPI — Federation Protocol
-# Skeleton release v0.1.0-skeleton — Sprint 1 will replace this with the
-# full 10-endpoint surface, error schemas, and security schemes.
-#
-# This file is the *canonical* form of the standard. The Markdown
-# documentation under docs/ explains *why*; this YAML is *what*.
+# 2Africa OpenAPI - Federation Protocol v1.0.0-rc1
+# This file is the canonical machine-readable form of the standard.
+# Markdown documentation under docs/ explains why; this YAML is what.
 
 openapi: 3.1.0
 
 info:
   title: 2Africa OpenAPI
   summary: Open federation protocol for African agricultural data exchange.
+  version: 1.0.0-rc1
   description: |
-    A vendor-neutral specification defining how single-farm operating
-    systems and multi-tenant agricultural platforms exchange data.
+    Vendor-neutral specification for federation between single-farm
+    operating systems (e.g. 2Africa AgriOS) and multi-tenant
+    agricultural platforms (e.g. 2Africa AgriCloud, Cropin, Apollo,
+    banks, certifiers, ministries of agriculture).
 
-    **This is a skeleton release (`v0.1.0-skeleton`).** Only the
-    `GET /healthz` endpoint is defined; the full surface lands in
-    Sprint 1 (`v1.0.0-rc1`).
+    Repository: https://github.com/2AfricaAI/2Africa-OpenAPI
 
-    See: https://github.com/2AfricaAI/2Africa-OpenAPI
-  version: 0.1.0-skeleton
+    Conformance levels:
+      - L1 Basic - OAuth + at least 1 upstream endpoint + Privacy Manifest.
+      - L2 Full  - all 10 endpoints + signed webhook delivery.
+      - L3 Adv.  - L2 + end-to-end field-level encryption + federated identity (v2.x).
   contact:
     name: 2Africa OpenAPI Maintainers
     url: https://github.com/2AfricaAI/2Africa-OpenAPI
@@ -35,11 +35,11 @@ info:
 
 servers:
   - url: https://api.agricloud.2africa.ai
-    description: Reference production server (AgriCloud)
+    description: Reference production server (AgriCloud).
   - url: https://sandbox.agricloud.2africa.ai
-    description: Reference sandbox (free, 7-day token renewal)
+    description: Reference sandbox (free, 7-day token renewal).
   - url: https://{host}
-    description: Self-hosted conformant implementation
+    description: Self-hosted conformant implementation.
     variables:
       host:
         default: api.example.com
@@ -48,22 +48,43 @@ servers:
 tags:
   - name: System
     description: Operational endpoints (no authentication required).
+  - name: Upstream
+    description: |
+      Single-farm to platform direction. Every upstream request MUST
+      carry a Privacy Manifest hash header and an idempotency key.
+      All five upstream endpoints are OFF by default; the data owner
+      opts each one in via Manifest.
+  - name: Downstream
+    description: |
+      Platform to single-farm direction. Read-only. Cursor-paginated.
+      The five downstream endpoints are ON by default for any client
+      authorised under the appropriate scope.
+  - name: Privacy
+    description: Privacy Manifest synchronisation.
+
+# Default security applied to every endpoint that does not override it.
+# /healthz overrides with `security: []`.
+security:
+  - OAuth2: []
 
 paths:
+
+  # =================================================================
+  # System
+  # =================================================================
   /healthz:
     get:
       operationId: getHealthz
       summary: Liveness probe.
       description: |
         Returns a fixed payload indicating that the server is reachable
-        and the spec version it implements. Intended for load balancers
-        and conformance test suites.
+        and the spec version it implements. Intended for load balancers,
+        uptime monitors, and the conformance test suite.
 
-        This endpoint is intentionally unauthenticated and never
-        rate-limited, but implementers MAY reject requests that do not
-        come from configured probe sources.
+        This endpoint is intentionally unauthenticated. Implementers
+        MAY rate-limit by source IP but MUST NOT require a token.
       tags: [System]
-      security: []     # explicitly public
+      security: []
       responses:
         '200':
           description: Server is healthy.
@@ -73,29 +94,543 @@ paths:
                 $ref: '#/components/schemas/HealthStatus'
               examples:
                 ok:
-                  summary: Healthy server
                   value:
                     status: ok
-                    spec_version: 0.1.0-skeleton
+                    spec_version: 1.0.0-rc1
                     server_time: '2026-05-29T14:30:00Z'
         '503':
-          description: |
-            Server is unable to serve traffic. The body uses the
-            project-wide RFC 7807 Problem Details format.
+          description: Server is unable to serve traffic.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
               examples:
                 draining:
-                  summary: Server is draining for maintenance
                   value:
                     type: https://errors.2africa.ai/service-unavailable
                     title: Service Unavailable
                     status: 503
                     detail: Server is draining; retry in 30 seconds.
 
+  # =================================================================
+  # Privacy Manifest sync (upstream-control)
+  # =================================================================
+  /v1/privacy-manifest:
+    put:
+      operationId: putPrivacyManifest
+      summary: Publish a new Privacy Manifest version.
+      description: |
+        Single-farm clients call this when the data owner edits the
+        Manifest locally. The server computes the canonical SHA-256
+        hash and caches it; subsequent upstream calls MUST present the
+        same hash in `X-Privacy-Manifest-Hash` or be rejected with
+        `manifest_hash_mismatch`.
+      tags: [Privacy]
+      security:
+        - OAuth2: ['privacy:manage']
+      parameters:
+        - $ref: '#/components/parameters/SpecVersion'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/yaml:
+            schema:
+              type: string
+              description: Canonical YAML of the Privacy Manifest document.
+      responses:
+        '200':
+          description: Manifest accepted; server has cached the new hash.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestAck'
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '422': { $ref: '#/components/responses/ManifestViolation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  # =================================================================
+  # Upstream endpoints (5)
+  # =================================================================
+  /v1/upstream/yields:
+    post:
+      operationId: postUpstreamYields
+      summary: Submit anonymous harvest yields.
+      description: |
+        Single-farm to platform. Each call submits a batch of harvest
+        events stripped of identifying detail (no farm name, no buyer,
+        no GPS finer than county). Useful for regional statistics and
+        peer benchmarking.
+      tags: [Upstream]
+      security:
+        - OAuth2: ['upstream:yields']
+      parameters:
+        - $ref: '#/components/parameters/SpecVersion'
+        - $ref: '#/components/parameters/PrivacyManifestHash'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [tenant_pseudo_id, records]
+              properties:
+                tenant_pseudo_id: { $ref: '#/components/schemas/TenantPseudoId' }
+                records:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items: { $ref: '#/components/schemas/YieldRecord' }
+            examples:
+              two-records:
+                value:
+                  tenant_pseudo_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                  records:
+                    - record_id: 8d6c4c3a-1234-4abc-9def-aaaabbbbcccc
+                      crop_code: TOMATO
+                      region_code: KE-30
+                      harvest_date: '2026-05-20'
+                      quantity: { quantity: 1234.5, unit: kg }
+                    - record_id: 8d6c4c3a-1234-4abc-9def-aaaabbbbdddd
+                      crop_code: MAIZE
+                      region_code: KE-30
+                      harvest_date: '2026-05-21'
+                      quantity: { quantity: 9800,   unit: kg }
+      responses:
+        '202':
+          description: Batch accepted for asynchronous processing.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchAck' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '422': { $ref: '#/components/responses/ManifestViolation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/upstream/prices:
+    post:
+      operationId: postUpstreamPrices
+      summary: Submit anonymous sale prices.
+      description: |
+        Submit per-SKU sale prices for regional benchmarking. Buyer
+        identity, contract terms, and absolute volumes are excluded;
+        only price-per-unit at a given moment in a given region.
+      tags: [Upstream]
+      security:
+        - OAuth2: ['upstream:prices']
+      parameters:
+        - $ref: '#/components/parameters/SpecVersion'
+        - $ref: '#/components/parameters/PrivacyManifestHash'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [tenant_pseudo_id, records]
+              properties:
+                tenant_pseudo_id: { $ref: '#/components/schemas/TenantPseudoId' }
+                records:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items: { $ref: '#/components/schemas/PriceRecord' }
+      responses:
+        '202':
+          description: Batch accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchAck' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '422': { $ref: '#/components/responses/ManifestViolation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/upstream/gap-records:
+    post:
+      operationId: postUpstreamGapRecords
+      summary: Submit GAP audit records.
+      description: |
+        Submit Good Agricultural Practice audit results (chemical use,
+        worker safety, traceability checkpoints). Often consumed by
+        certification bodies and downstream buyers under their own
+        scopes.
+      tags: [Upstream]
+      security:
+        - OAuth2: ['upstream:gap']
+      parameters:
+        - $ref: '#/components/parameters/SpecVersion'
+        - $ref: '#/components/parameters/PrivacyManifestHash'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [tenant_pseudo_id, records]
+              properties:
+                tenant_pseudo_id: { $ref: '#/components/schemas/TenantPseudoId' }
+                records:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items: { $ref: '#/components/schemas/GapRecord' }
+      responses:
+        '202':
+          description: Batch accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchAck' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '422': { $ref: '#/components/responses/ManifestViolation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/upstream/credit-pack:
+    post:
+      operationId: postUpstreamCreditPack
+      summary: Submit a one-shot credit pack to a bank or lender.
+      description: |
+        Special non-periodic endpoint. The data owner triggers this
+        when applying for credit: 12 months of P&L + open orders +
+        asset inventory are packaged and delivered to the bank
+        identified by `recipient_id`. This call does NOT count against
+        regular upstream quotas, but each unique `pack_id` may be
+        submitted at most once.
+      tags: [Upstream]
+      security:
+        - OAuth2: ['upstream:credit-pack']
+      parameters:
+        - $ref: '#/components/parameters/SpecVersion'
+        - $ref: '#/components/parameters/PrivacyManifestHash'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditPack'
+      responses:
+        '201':
+          description: Pack accepted and delivered.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreditPackAck' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '422': { $ref: '#/components/responses/ManifestViolation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/upstream/telemetry:
+    post:
+      operationId: postUpstreamTelemetry
+      summary: Submit anonymous usage telemetry (opt-in).
+      description: |
+        Aggregated, non-business metadata only - never includes
+        customer name, monetary amount, or specific crop. Used to
+        improve the standard, the SDKs, and operator playbooks.
+      tags: [Upstream]
+      security:
+        - OAuth2: ['upstream:telemetry']
+      parameters:
+        - $ref: '#/components/parameters/SpecVersion'
+        - $ref: '#/components/parameters/PrivacyManifestHash'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [tenant_pseudo_id, events]
+              properties:
+                tenant_pseudo_id: { $ref: '#/components/schemas/TenantPseudoId' }
+                events:
+                  type: array
+                  minItems: 1
+                  maxItems: 10000
+                  items: { $ref: '#/components/schemas/TelemetryEvent' }
+      responses:
+        '204':
+          description: Telemetry accepted; no body.
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '422': { $ref: '#/components/responses/ManifestViolation' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  # =================================================================
+  # Downstream endpoints (5)
+  # =================================================================
+  /v1/downstream/dictionaries:
+    get:
+      operationId: getDownstreamDictionaries
+      summary: Standard dictionaries (crops, SKUs, regions, units).
+      description: |
+        Returns the platform's authoritative reference data. Clients
+        SHOULD cache responses according to the `Cache-Control` header
+        and refresh on `dictionary.updated` webhook.
+      tags: [Downstream]
+      security:
+        - OAuth2: ['downstream:dictionaries']
+      parameters:
+        - $ref: '#/components/parameters/SpecVersion'
+        - in: query
+          name: kind
+          required: false
+          schema:
+            type: string
+            enum: [crop, sku, region, unit, currency]
+          description: Restrict the response to one kind of dictionary.
+        - $ref: '#/components/parameters/PageToken'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of dictionary entries.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DictionaryPage' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/downstream/prices:
+    get:
+      operationId: getDownstreamPrices
+      summary: Regional price benchmarks.
+      description: |
+        Median, p25, p75 prices per SKU per region in a given window.
+        Useful for the AgriOS dashboard card "Your price KES 75 vs
+        regional median KES 82".
+      tags: [Downstream]
+      security:
+        - OAuth2: ['downstream:prices']
+      parameters:
+        - $ref: '#/components/parameters/SpecVersion'
+        - in: query
+          name: region_code
+          required: true
+          schema: { $ref: '#/components/schemas/RegionCode' }
+        - in: query
+          name: sku_code
+          required: false
+          schema:
+            type: string
+            pattern: '^[A-Z][A-Z0-9_]{1,31}$'
+        - in: query
+          name: window
+          required: false
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+        - $ref: '#/components/parameters/PageToken'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of regional prices.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RegionalPricePage' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/downstream/benchmarks:
+    get:
+      operationId: getDownstreamBenchmarks
+      summary: Peer benchmarks.
+      description: |
+        Yield-per-hectare, cost-of-production, and other KPIs compared
+        against an anonymised peer cohort defined by region, crop, and
+        farm-size band.
+      tags: [Downstream]
+      security:
+        - OAuth2: ['downstream:benchmarks']
+      parameters:
+        - $ref: '#/components/parameters/SpecVersion'
+        - in: query
+          name: region_code
+          required: true
+          schema: { $ref: '#/components/schemas/RegionCode' }
+        - in: query
+          name: crop_code
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z][A-Z0-9_]{1,31}$'
+        - in: query
+          name: size_band
+          required: false
+          schema:
+            type: string
+            enum: [smallholder, medium, large]
+      responses:
+        '200':
+          description: Benchmark snapshot.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Benchmark' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/downstream/marketplace:
+    get:
+      operationId: getDownstreamMarketplace
+      summary: Open sourcing orders matching the client's region/crops.
+      description: |
+        Returns buyer-posted orders the client may respond to. The
+        platform filters by region and the client's declared crop
+        capabilities. Posting a response is OUT of scope for v1.0
+        (see RFC-021 for the v1.1 proposal).
+      tags: [Downstream]
+      security:
+        - OAuth2: ['downstream:marketplace']
+      parameters:
+        - $ref: '#/components/parameters/SpecVersion'
+        - in: query
+          name: region_code
+          required: true
+          schema: { $ref: '#/components/schemas/RegionCode' }
+        - $ref: '#/components/parameters/PageToken'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of marketplace orders.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceOrderPage' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/downstream/procurement:
+    get:
+      operationId: getDownstreamProcurement
+      summary: Group-buy / collective procurement opportunities.
+      description: |
+        Surfaces seller-posted offers (seed, fertiliser, equipment)
+        with collective discounts when N buyers commit. The platform
+        ranks by region proximity and pending commit count.
+      tags: [Downstream]
+      security:
+        - OAuth2: ['downstream:procurement']
+      parameters:
+        - $ref: '#/components/parameters/SpecVersion'
+        - in: query
+          name: region_code
+          required: true
+          schema: { $ref: '#/components/schemas/RegionCode' }
+        - in: query
+          name: category
+          required: false
+          schema:
+            type: string
+            enum: [seed, fertiliser, pesticide, equipment, packaging, other]
+        - $ref: '#/components/parameters/PageToken'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of procurement opportunities.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProcurementOpportunityPage' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+# ====================================================================
+# Components
+# ====================================================================
 components:
+
+  # ------------------------------------------------------------------
+  # Reusable parameters
+  # ------------------------------------------------------------------
+  parameters:
+
+    SpecVersion:
+      name: X-Spec-Version
+      in: header
+      required: true
+      description: |
+        Spec version the client implements (SemVer). The server uses
+        this to decide which compatibility shim, if any, to apply.
+      schema:
+        type: string
+        pattern: '^\d+\.\d+\.\d+(-[A-Za-z0-9\-\.]+)?$'
+        example: 1.0.0-rc1
+
+    PrivacyManifestHash:
+      name: X-Privacy-Manifest-Hash
+      in: header
+      required: true
+      description: |
+        SHA-256 hash of the canonicalised Privacy Manifest currently
+        in effect at the client. The server verifies this against the
+        cached hash from the most recent /v1/privacy-manifest PUT and
+        rejects mismatches with `manifest_hash_mismatch`.
+      schema:
+        type: string
+        pattern: '^sha256:[0-9a-f]{64}$'
+        example: 'sha256:a4f8b9c2d6e1f3a7b5d8c2e6f9a1b4d7e2c5f8a1b4d7e2c5f8a1b4d7e2c5f8a1'
+
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Client-generated UUID v4 unique per logical operation. Servers
+        MUST dedupe over a window of at least 24 hours and return the
+        original response (with `Idempotency-Replay: true`) on retry.
+      schema:
+        type: string
+        format: uuid
+        example: 3f55cd84-3a3a-46f3-9b1a-9e16f8b86e2a
+
+    PageToken:
+      name: page_token
+      in: query
+      required: false
+      description: Opaque cursor returned by the previous page.
+      schema: { type: string }
+
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      description: Maximum number of items per page (server may cap).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+
+  # ------------------------------------------------------------------
+  # Reusable schemas
+  # ------------------------------------------------------------------
   schemas:
 
     HealthStatus:
@@ -103,71 +638,454 @@ components:
       additionalProperties: false
       required: [status, spec_version, server_time]
       properties:
-        status:
-          type: string
-          enum: [ok, degraded]
-          description: |
-            `ok` — the server is fully operational.
-            `degraded` — the server is up but some downstream
-            dependency is impaired; calls may still succeed.
-        spec_version:
-          type: string
-          description: The OpenAPI spec version this server implements.
-          example: 0.1.0-skeleton
-          pattern: '^\d+\.\d+\.\d+(-[A-Za-z0-9\-\.]+)?$'
-        server_time:
-          type: string
-          format: date-time
-          description: ISO 8601 UTC timestamp.
-          example: '2026-05-29T14:30:00Z'
+        status:        { type: string, enum: [ok, degraded] }
+        spec_version:  { type: string, pattern: '^\d+\.\d+\.\d+(-[A-Za-z0-9\-\.]+)?$' }
+        server_time:   { type: string, format: date-time }
 
     Problem:
-      # RFC 7807 placeholder — full error model lands in Sprint 1.
+      # RFC 7807 Problem Details for HTTP APIs.
       type: object
-      description: |
-        RFC 7807 Problem Details. Documented here as a placeholder so
-        Spectral does not flag the lack of an error schema in the
-        skeleton; populated in Sprint 1.
+      description: RFC 7807 Problem Details.
+      required: [type, title, status]
       properties:
         type:
           type: string
           format: uri
-          example: https://errors.2africa.ai/not-implemented
+          description: URI identifying the problem type.
+          example: https://errors.2africa.ai/invalid-token
         title:
           type: string
-          example: Not Implemented
+          description: Short human-readable summary.
         status:
           type: integer
           minimum: 100
           maximum: 599
-          example: 501
         detail:
           type: string
-          example: Endpoint will be defined in Sprint 1.
+          description: Human-readable explanation specific to this occurrence.
         instance:
           type: string
           format: uri-reference
+          description: URI of the specific occurrence.
+        request_id:
+          type: string
+          format: uuid
+          description: Server-assigned request identifier for log correlation.
+      additionalProperties: true   # RFC 7807 permits extension members.
 
+    TenantPseudoId:
+      type: string
+      format: uuid
+      description: |
+        Stable pseudonymous identifier for a single-farm tenant. Not
+        derivable from any business name or address. One per tenant
+        per server.
+      example: f47ac10b-58cc-4372-a567-0e02b2c3d479
+
+    RegionCode:
+      type: string
+      description: |
+        ISO 3166-1 alpha-2 country code + ISO 3166-2 subdivision,
+        joined with a hyphen. Upstream data MUST NOT be more specific
+        than the second level (county / region) to prevent farm
+        re-identification.
+      pattern: '^[A-Z]{2}-[A-Z0-9]{1,3}$'
+      examples:
+        - KE-30        # Nairobi County, Kenya
+        - TZ-02        # Arusha, Tanzania
+        - SN-DK        # Dakar, Senegal
+
+    Money:
+      type: object
+      additionalProperties: false
+      required: [amount, currency]
+      properties:
+        amount:
+          type: string
+          pattern: '^-?\d+(\.\d{1,2})?$'
+          description: Decimal as string, 2-decimal max. String avoids float drift.
+          example: '1234.50'
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          description: ISO 4217 currency code.
+          example: KES
+
+    Quantity:
+      type: object
+      additionalProperties: false
+      required: [quantity, unit]
+      properties:
+        quantity:
+          type: number
+          format: double
+          minimum: 0
+        unit:
+          type: string
+          enum: [kg, ton, crate, bag_25kg, bag_50kg, litre, dozen, head]
+
+    YieldRecord:
+      type: object
+      additionalProperties: false
+      required: [record_id, crop_code, region_code, harvest_date, quantity]
+      properties:
+        record_id:     { type: string, format: uuid }
+        crop_code:     { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        region_code:   { $ref: '#/components/schemas/RegionCode' }
+        harvest_date:  { type: string, format: date }
+        quantity:      { $ref: '#/components/schemas/Quantity' }
+        gap_compliant: { type: boolean, description: Optional flag if a GAP audit covers this record. }
+
+    PriceRecord:
+      type: object
+      additionalProperties: false
+      required: [record_id, sku_code, region_code, sold_on, unit_price]
+      properties:
+        record_id:    { type: string, format: uuid }
+        sku_code:     { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        region_code:  { $ref: '#/components/schemas/RegionCode' }
+        sold_on:      { type: string, format: date }
+        unit_price:   { $ref: '#/components/schemas/Money' }
+        per_unit:
+          type: string
+          enum: [kg, ton, crate, bag_25kg, bag_50kg, litre, dozen, head]
+
+    GapRecord:
+      type: object
+      additionalProperties: false
+      required: [record_id, audit_date, scheme, result]
+      properties:
+        record_id:   { type: string, format: uuid }
+        audit_date:  { type: string, format: date }
+        scheme:
+          type: string
+          enum: [GLOBALG_A_P, KENYA_GAP, ORGANIC_KE, FAIRTRADE, RAINFOREST_ALLIANCE, OTHER]
+        result:
+          type: string
+          enum: [pass, conditional_pass, fail]
+        non_conformities:
+          type: integer
+          minimum: 0
+        region_code: { $ref: '#/components/schemas/RegionCode' }
+
+    CreditPack:
+      type: object
+      additionalProperties: false
+      required: [pack_id, tenant_pseudo_id, recipient_id, period_start, period_end, financials]
+      properties:
+        pack_id:           { type: string, format: uuid }
+        tenant_pseudo_id:  { $ref: '#/components/schemas/TenantPseudoId' }
+        recipient_id:
+          type: string
+          description: Recipient identifier (e.g. a bank's onboarded client ID on the platform).
+          pattern: '^[A-Z0-9_]{3,64}$'
+        period_start: { type: string, format: date }
+        period_end:   { type: string, format: date }
+        financials:
+          type: object
+          additionalProperties: false
+          required: [revenue, cost_of_goods, gross_profit, open_orders_value]
+          properties:
+            revenue:           { $ref: '#/components/schemas/Money' }
+            cost_of_goods:     { $ref: '#/components/schemas/Money' }
+            gross_profit:      { $ref: '#/components/schemas/Money' }
+            open_orders_value: { $ref: '#/components/schemas/Money' }
+        assets:
+          type: array
+          items:
+            type: object
+            required: [kind, valuation]
+            properties:
+              kind:      { type: string, enum: [land, equipment, livestock, inventory, other] }
+              valuation: { $ref: '#/components/schemas/Money' }
+              description: { type: string, maxLength: 200 }
+
+    CreditPackAck:
+      type: object
+      required: [pack_id, accepted_at, delivered_to]
+      properties:
+        pack_id:      { type: string, format: uuid }
+        accepted_at:  { type: string, format: date-time }
+        delivered_to: { type: string, description: Recipient identifier the pack was routed to. }
+
+    TelemetryEvent:
+      type: object
+      additionalProperties: false
+      required: [event, occurred_at]
+      properties:
+        event:
+          type: string
+          description: Aggregate event name. MUST NOT include identifiers or amounts.
+          pattern: '^[a-z][a-z0-9_]{1,63}\.[a-z][a-z0-9_]{1,63}$'
+          example: dashboard.opened
+        occurred_at: { type: string, format: date-time }
+        sdk_version: { type: string }
+        os:          { type: string, enum: [linux, macos, windows, ios, android, other] }
+
+    ManifestAck:
+      type: object
+      required: [manifest_hash, accepted_at]
+      properties:
+        manifest_hash: { type: string, pattern: '^sha256:[0-9a-f]{64}$' }
+        accepted_at:   { type: string, format: date-time }
+
+    BatchAck:
+      type: object
+      required: [batch_id, accepted_count, accepted_at]
+      properties:
+        batch_id:       { type: string, format: uuid }
+        accepted_count: { type: integer, minimum: 0 }
+        accepted_at:    { type: string, format: date-time }
+
+    # ----- Downstream page schemas -----
+
+    DictionaryEntry:
+      type: object
+      required: [code, kind, label]
+      properties:
+        code:  { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        kind:  { type: string, enum: [crop, sku, region, unit, currency] }
+        label: { type: string, maxLength: 200 }
+        synonyms:
+          type: array
+          items: { type: string, maxLength: 200 }
+
+    DictionaryPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/DictionaryEntry' }
+        next_page_token: { type: string }
+
+    RegionalPrice:
+      type: object
+      required: [sku_code, region_code, window, p25, median, p75, sample_size]
+      properties:
+        sku_code:     { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        region_code:  { $ref: '#/components/schemas/RegionCode' }
+        window:       { type: string, enum: [7d, 30d, 90d] }
+        p25:          { $ref: '#/components/schemas/Money' }
+        median:       { $ref: '#/components/schemas/Money' }
+        p75:          { $ref: '#/components/schemas/Money' }
+        sample_size:  { type: integer, minimum: 30, description: Servers MUST NOT return a row when sample_size < 30 (re-id risk). }
+
+    RegionalPricePage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/RegionalPrice' }
+        next_page_token: { type: string }
+
+    Benchmark:
+      type: object
+      required: [region_code, crop_code, window, metrics]
+      properties:
+        region_code: { $ref: '#/components/schemas/RegionCode' }
+        crop_code:   { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        size_band:   { type: string, enum: [smallholder, medium, large] }
+        window:      { type: string, enum: [30d, 90d, 365d], default: 90d }
+        metrics:
+          type: object
+          additionalProperties: false
+          properties:
+            yield_per_hectare_kg: { type: number, format: double, minimum: 0 }
+            cost_per_kg:          { $ref: '#/components/schemas/Money' }
+            gross_margin_pct:     { type: number, minimum: -100, maximum: 100 }
+            sample_size:          { type: integer, minimum: 30 }
+
+    MarketplaceOrder:
+      type: object
+      required: [order_id, sku_code, region_code, quantity, buyer_kind, posted_at, expires_at]
+      properties:
+        order_id:    { type: string, format: uuid }
+        sku_code:    { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        region_code: { $ref: '#/components/schemas/RegionCode' }
+        quantity:    { $ref: '#/components/schemas/Quantity' }
+        target_price: { $ref: '#/components/schemas/Money' }
+        buyer_kind:  { type: string, enum: [retailer, processor, exporter, institution, other] }
+        posted_at:   { type: string, format: date-time }
+        expires_at:  { type: string, format: date-time }
+
+    MarketplaceOrderPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MarketplaceOrder' }
+        next_page_token: { type: string }
+
+    ProcurementOpportunity:
+      type: object
+      required: [opportunity_id, category, sku_code, region_code, posted_at, expires_at, threshold]
+      properties:
+        opportunity_id: { type: string, format: uuid }
+        category:    { type: string, enum: [seed, fertiliser, pesticide, equipment, packaging, other] }
+        sku_code:    { type: string, pattern: '^[A-Z][A-Z0-9_]{1,31}$' }
+        region_code: { $ref: '#/components/schemas/RegionCode' }
+        unit_price_at_threshold: { $ref: '#/components/schemas/Money' }
+        threshold:
+          type: object
+          required: [committed, required]
+          properties:
+            committed: { type: integer, minimum: 0 }
+            required:  { type: integer, minimum: 1 }
+        posted_at:  { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+
+    ProcurementOpportunityPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ProcurementOpportunity' }
+        next_page_token: { type: string }
+
+  # ------------------------------------------------------------------
+  # Reusable responses (the RFC 7807 error model)
+  # ------------------------------------------------------------------
+  responses:
+
+    InvalidRequest:
+      description: |
+        400 - Request is syntactically or semantically malformed.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            invalid_request:
+              value:
+                type: https://errors.2africa.ai/invalid-request
+                title: Bad Request
+                status: 400
+                detail: 'records[2].quantity.unit: must be one of kg, ton, crate, ...'
+
+    InvalidToken:
+      description: 401 - Token missing, invalid, or expired.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            invalid_token:
+              value:
+                type: https://errors.2africa.ai/invalid-token
+                title: Unauthorized
+                status: 401
+                detail: Access token expired 12 seconds ago; refresh and retry.
+
+    InsufficientScope:
+      description: 403 - Token authentic but lacks the required scope.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            insufficient_scope:
+              value:
+                type: https://errors.2africa.ai/insufficient-scope
+                title: Forbidden
+                status: 403
+                detail: 'Token does not include scope upstream:credit-pack.'
+
+    NotFound:
+      description: 404 - Resource not found or filtered out by privacy guards.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+    IdempotencyConflict:
+      description: |
+        409 - Idempotency-Key was previously used with a different
+        request body. The original outcome is preserved; the new
+        request is rejected.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            idempotency_conflict:
+              value:
+                type: https://errors.2africa.ai/idempotency-conflict
+                title: Conflict
+                status: 409
+                detail: Idempotency-Key reused with a different payload.
+
+    ManifestViolation:
+      description: |
+        422 - A field in the request exceeds what the active Privacy
+        Manifest allows, or the manifest hash sent in
+        `X-Privacy-Manifest-Hash` does not match the server's cached
+        hash for this client.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            manifest_hash_mismatch:
+              value:
+                type: https://errors.2africa.ai/manifest-hash-mismatch
+                title: Unprocessable Entity
+                status: 422
+                detail: |
+                  Server has a different manifest hash cached. Publish
+                  the latest manifest via PUT /v1/privacy-manifest and
+                  retry.
+            manifest_field_not_allowed:
+              value:
+                type: https://errors.2africa.ai/manifest-field-not-allowed
+                title: Unprocessable Entity
+                status: 422
+                detail: 'Field gap_compliant is not in the Manifest allow-list for /v1/upstream/yields.'
+
+    RateLimited:
+      description: 429 - Rate limit exceeded.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            rate_limited:
+              value:
+                type: https://errors.2africa.ai/rate-limited
+                title: Too Many Requests
+                status: 429
+                detail: 'Quota exhausted: 1000 calls / hour for upstream:yields.'
+
+  # ------------------------------------------------------------------
+  # Security
+  # ------------------------------------------------------------------
   securitySchemes:
+
     OAuth2:
-      # Placeholder. Full scopes table lands in Sprint 1 (spec §2.4).
       type: oauth2
       description: |
-        OAuth 2.0 + PKCE (RFC 6749 + RFC 7636). Scopes will be
-        enumerated in Sprint 1.
+        OAuth 2.0 Authorization Framework (RFC 6749) + PKCE (RFC 7636).
+        Tokens are JWTs (RFC 7519). Access tokens expire after 1 hour;
+        refresh tokens after 90 days and rotate on every use.
       flows:
         authorizationCode:
           authorizationUrl: https://api.agricloud.2africa.ai/oauth/authorize
-          tokenUrl: https://api.agricloud.2africa.ai/oauth/token
-          refreshUrl: https://api.agricloud.2africa.ai/oauth/refresh
+          tokenUrl:         https://api.agricloud.2africa.ai/oauth/token
+          refreshUrl:       https://api.agricloud.2africa.ai/oauth/refresh
           scopes:
-            'upstream:yields': Submit anonymous harvest yields.
+            'privacy:manage':         Publish and read the Privacy Manifest.
+            'upstream:yields':        Submit anonymous harvest yields.
+            'upstream:prices':        Submit anonymous sale prices.
+            'upstream:gap':           Submit GAP audit records.
+            'upstream:credit-pack':   Submit one-shot credit packs.
+            'upstream:telemetry':     Submit anonymous telemetry.
+            'downstream:dictionaries': Read standard dictionaries.
+            'downstream:prices':      Read regional price benchmarks.
+            'downstream:benchmarks':  Read peer benchmarks.
+            'downstream:marketplace': Read buyer-posted orders.
+            'downstream:procurement': Read group-buy opportunities.
         clientCredentials:
           tokenUrl: https://api.agricloud.2africa.ai/oauth/token
           scopes:
-            'upstream:telemetry': Submit anonymous telemetry.
-
-security:
-  # Default: most endpoints require OAuth2. `/healthz` opts out
-  # explicitly with `security: []`.
-  - OAuth2: []
+            'upstream:telemetry':     Submit anonymous telemetry (server-to-server).
+            'downstream:dictionaries': Read standard dictionaries (server-to-server).
