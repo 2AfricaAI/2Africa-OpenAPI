@@ -1,41 +1,53 @@
 # SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
 # SPDX-License-Identifier: CC-BY-4.0
 #
-# Privacy Manifest — JSON Schema
-# Skeleton placeholder. Full schema lands in Sprint 1.
+# 2Africa OpenAPI - Privacy Manifest schema (v1.0.0-rc1)
 #
 # The Privacy Manifest is a YAML document authored by the data owner
 # (typically a farm administrator) that declares, per upstream
-# endpoint, which fields the platform is permitted to receive. Every
-# upstream request must carry the SHA-256 hash of the canonicalised
-# manifest in the `X-Privacy-Manifest-Hash` header; the server rejects
-# requests whose body exceeds the manifest's allow list.
+# endpoint, which fields the platform is permitted to receive. The
+# server caches the SHA-256 hash of the canonicalised manifest the
+# client most recently PUT to /v1/privacy-manifest; every upstream
+# request must carry the same hash in `X-Privacy-Manifest-Hash`.
+#
+# This file is the JSON Schema 2020-12 contract the server uses to
+# validate a published manifest. A client SDK may also use it to
+# validate locally before publishing.
 
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: https://standards.2africa.ai/privacy-manifest/v1.json
 title: 2Africa OpenAPI Privacy Manifest
 description: |
-  Declarative consent document. Skeleton placeholder — Sprint 1 fills
-  in the full per-endpoint field-allow-list structure.
+  Declarative consent document. One per single-farm tenant. The hash
+  of the canonical form of this document is what the server stores;
+  the document itself is sent only on PUT /v1/privacy-manifest.
+
 type: object
 additionalProperties: false
 
+required:
+  - manifest_version
+  - profile
+  - generated_at
+  - owner_id
+  - endpoints
+
 properties:
+
   manifest_version:
     type: string
-    pattern: '^\d+\.\d+\.\d+$'
     description: SemVer of the manifest format itself.
-    examples: ['1.0.0']
+    pattern: '^\d+\.\d+\.\d+$'
+    examples:
+      - 1.0.0
 
   profile:
     type: string
-    enum: [strict, balanced, open, custom]
     description: |
-      Preset that the manifest was derived from.
-      - `strict`   — minimal sharing (default for new tenants)
-      - `balanced` — recommended for most farms (Sprint 1 default)
-      - `open`     — share by default, opt-out per field
-      - `custom`   — manifest deviates from the presets
+      Preset that the manifest was derived from. `custom` indicates the
+      manifest deviates from any preset; tooling may use this to render
+      a "non-standard" badge in the data owner's UI.
+    enum: [strict, balanced, open, custom]
     default: balanced
 
   generated_at:
@@ -43,4 +55,110 @@ properties:
     format: date-time
     description: ISO 8601 UTC timestamp of manifest generation.
 
-required: [manifest_version, profile, generated_at]
+  owner_id:
+    type: string
+    description: |
+      Stable identifier of the human (or organisational role) that
+      authored this manifest. Used in the platform's audit log; never
+      surfaced in upstream payloads.
+    minLength: 3
+    maxLength: 128
+
+  notes:
+    type: string
+    description: Free-form notes the data owner attaches to this version.
+    maxLength: 2000
+
+  endpoints:
+    type: object
+    additionalProperties: false
+    description: |
+      One entry per upstream endpoint. Absence of a key means the
+      endpoint is OFF; presence with `enabled: false` is also OFF.
+    properties:
+      yields:        { $ref: '#/$defs/EndpointPolicy' }
+      prices:        { $ref: '#/$defs/EndpointPolicy' }
+      gap_records:   { $ref: '#/$defs/EndpointPolicy' }
+      credit_pack:   { $ref: '#/$defs/EndpointPolicy' }
+      telemetry:     { $ref: '#/$defs/EndpointPolicy' }
+
+$defs:
+
+  EndpointPolicy:
+    type: object
+    additionalProperties: false
+    required: [enabled]
+    properties:
+      enabled:
+        type: boolean
+        description: Master switch for this endpoint. Default OFF.
+      allow_fields:
+        type: array
+        description: |
+          Allow-list of field paths the client is permitted to send.
+          Paths use dotted JSON-pointer style relative to the record
+          root, e.g. `records[].quantity.unit`. If absent, only the
+          REQUIRED fields of the endpoint schema are permitted.
+        items:
+          type: string
+          pattern: '^[a-z_][a-z0-9_]*(\[\])?(\.[a-z_][a-z0-9_]*(\[\])?)*$'
+        uniqueItems: true
+      deny_fields:
+        type: array
+        description: |
+          Deny-list overlaid on top of allow_fields. Useful when the
+          allow-list is wildcarded and a single field must be blocked.
+        items:
+          type: string
+          pattern: '^[a-z_][a-z0-9_]*(\[\])?(\.[a-z_][a-z0-9_]*(\[\])?)*$'
+        uniqueItems: true
+      region_floor:
+        type: string
+        description: |
+          Minimum region granularity the client will share for this
+          endpoint. `country` = ISO 3166-1 alpha-2 only; `subdivision`
+          = ISO 3166-2 (e.g. KE-30). Servers MUST aggregate any
+          finer-grained data to this floor before storage.
+        enum: [country, subdivision]
+        default: subdivision
+      retention_days:
+        type: integer
+        description: |
+          Maximum number of days the server may retain a given record
+          before purging. Servers MUST honour this on a per-record
+          basis. Zero means "do not retain after acknowledgement".
+        minimum: 0
+        maximum: 3650
+      rate_limit_per_hour:
+        type: integer
+        description: |
+          Owner-imposed ceiling on outbound requests per hour to this
+          endpoint. The client SDK enforces locally; the server may
+          additionally enforce by token.
+        minimum: 0
+        maximum: 100000
+      recipients:
+        type: array
+        description: |
+          For credit-pack only: the allow-list of recipient_ids the
+          client may target. Ignored on other endpoints.
+        items:
+          type: string
+          pattern: '^[A-Z0-9_]{3,64}$'
+
+  # Preset profiles, included for documentation - not enforced at the
+  # schema level (the `profile` field is informational).
+  StrictExample:
+    description: |
+      Example of the strict preset. All endpoints OFF, only telemetry
+      may be enabled.
+
+  BalancedExample:
+    description: |
+      Example of the balanced preset. yields + prices + gap_records ON
+      with subdivision floor and 365-day retention.
+
+  OpenExample:
+    description: |
+      Example of the open preset. All endpoints ON with subdivision
+      floor and 730-day retention.
