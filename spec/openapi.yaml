@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
 # SPDX-License-Identifier: CC-BY-4.0
 #
-# 2Africa OpenAPI - Federation Protocol v1.0.0-rc1
+# 2Africa OpenAPI - Federation Protocol v1.1.0-rc1
 # This file is the canonical machine-readable form of the standard.
 # Markdown documentation under docs/ explains why; this YAML is what.
 
@@ -10,7 +10,7 @@ openapi: 3.1.0
 info:
   title: 2Africa OpenAPI
   summary: Open federation protocol for African agricultural data exchange.
-  version: 1.0.0-rc1
+  version: 1.1.0-rc1
   description: |
     Vendor-neutral specification for federation between single-farm
     operating systems (e.g. 2Africa AgriOS) and multi-tenant
@@ -21,7 +21,7 @@ info:
 
     Conformance levels:
       - L1 Basic - OAuth + at least 1 upstream endpoint + Privacy Manifest.
-      - L2 Full  - all 10 endpoints + signed webhook delivery.
+      - L2 Full  - all 12 endpoints + signed webhook delivery + event backfill.
       - L3 Adv.  - L2 + end-to-end field-level encryption + federated identity (v2.x).
   contact:
     name: 2Africa OpenAPI Maintainers
@@ -96,7 +96,7 @@ paths:
                 ok:
                   value:
                     status: ok
-                    spec_version: 1.0.0-rc1
+                    spec_version: 1.1.0-rc1
                     server_time: '2026-05-29T14:30:00Z'
         '503':
           description: Server is unable to serve traffic.
@@ -563,6 +563,100 @@ paths:
 
 # ====================================================================
 # Components
+  # =================================================================
+  # Webhook backfill (RFC-019, v1.1)
+  # =================================================================
+  /v1/events:
+    get:
+      operationId: getEvents
+      summary: Backfill missed webhook events.
+      description: |
+        Returns events the server would have delivered between `since`
+        and now, in chronological order. Useful when a receiver was
+        offline beyond the 24-hour live-retry window. Each row mirrors
+        the bytes of a live webhook delivery so receivers can verify
+        the signature identically.
+
+        Retention: at least 30 days; older `since` values return 400.
+      tags: [Downstream]
+      security:
+        - OAuth2: ['events:read']
+      parameters:
+        - $ref: '#/components/parameters/SpecVersion'
+        - in: query
+          name: since
+          required: true
+          description: Unix timestamp (seconds). MUST be within the last 30 days.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - in: query
+          name: event_type
+          required: false
+          schema:
+            type: string
+            pattern: '^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$'
+        - $ref: '#/components/parameters/PageToken'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of historical event deliveries.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventReplayPage' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  # =================================================================
+  # Marketplace response (RFC-021, v1.1)
+  # =================================================================
+  /v1/downstream/marketplace/{order_id}/responses:
+    post:
+      operationId: postMarketplaceResponse
+      summary: Respond to a buyer-posted marketplace order.
+      description: |
+        Lets a seller submit an in-protocol response (offered quantity,
+        price, availability window) to a marketplace order. The buyer
+        is notified via the `marketplace.response_received` webhook
+        (added in v1.1).
+      tags: [Downstream]
+      security:
+        - OAuth2: ['marketplace:respond']
+      parameters:
+        - $ref: '#/components/parameters/SpecVersion'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - in: path
+          name: order_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MarketplaceResponse' }
+      responses:
+        '201':
+          description: Response accepted and routed to the buyer.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarketplaceResponseAck' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '410':
+          description: Order has expired.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
 # ====================================================================
 components:
 
@@ -946,6 +1040,61 @@ components:
           items: { $ref: '#/components/schemas/ProcurementOpportunity' }
         next_page_token: { type: string }
 
+
+    # ---- v1.1 schemas (RFC-019 + RFC-021) -----------------------------
+
+    EventReplayRow:
+      type: object
+      required: [delivery_id, signature, spec_version, payload]
+      properties:
+        delivery_id:
+          type: string
+          format: uuid
+          description: Same identifier the live delivery would carry in X-AgriCloud-Delivery-Id.
+        signature:
+          type: string
+          pattern: '^t=\d+,v1=[0-9a-f]{64}$'
+          description: HMAC-SHA256 signature header value (chapter 7 §7.4).
+        spec_version:
+          type: string
+          pattern: '^\d+\.\d+\.\d+(-[A-Za-z0-9\-\.]+)?$'
+        payload:
+          type: object
+          description: Event body — same shape as a live POST body.
+          additionalProperties: true
+
+    EventReplayPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/EventReplayRow' }
+        next_page_token: { type: string }
+
+    MarketplaceResponse:
+      type: object
+      additionalProperties: false
+      required: [seller_pseudo_id, offered_quantity, offered_unit_price, available_from, available_until]
+      properties:
+        seller_pseudo_id: { $ref: '#/components/schemas/TenantPseudoId' }
+        offered_quantity: { $ref: '#/components/schemas/Quantity' }
+        offered_unit_price: { $ref: '#/components/schemas/Money' }
+        available_from:   { type: string, format: date }
+        available_until:  { type: string, format: date }
+        notes:
+          type: string
+          maxLength: 500
+
+    MarketplaceResponseAck:
+      type: object
+      required: [response_id, order_id, accepted_at, buyer_notified]
+      properties:
+        response_id:    { type: string, format: uuid }
+        order_id:       { type: string, format: uuid }
+        accepted_at:    { type: string, format: date-time }
+        buyer_notified: { type: boolean }
+
   # ------------------------------------------------------------------
   # Reusable responses (the RFC 7807 error model)
   # ------------------------------------------------------------------
@@ -1084,6 +1233,8 @@ components:
             'downstream:benchmarks':  Read peer benchmarks.
             'downstream:marketplace': Read buyer-posted orders.
             'downstream:procurement': Read group-buy opportunities.
+            'events:read':            Read historical webhook event deliveries (v1.1, RFC-019).
+            'marketplace:respond':    Respond to buyer-posted marketplace orders (v1.1, RFC-021).
         clientCredentials:
           tokenUrl: https://api.agricloud.2africa.ai/oauth/token
           scopes:

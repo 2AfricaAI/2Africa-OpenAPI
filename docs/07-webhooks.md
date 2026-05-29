@@ -133,11 +133,47 @@ processing belongs in a background job.
 If a receiver is offline for an extended period, the platform's
 retry budget will eventually exhaust. To catch up:
 
-- v1.0 has no backfill endpoint. Receivers MUST re-fetch the
+- v1.1 adds `GET /v1/events?since=<unix_seconds>` (RFC-019). Retention
+  is at least 30 days. Required scope: `events:read`.
+- Each row in the response mirrors the bytes of a live delivery, so
+  the same `verify_signature` helper validates backfilled events
+  identically.
+- For environments still on v1.0, receivers MUST re-fetch the
   affected downstream resource (`/v1/downstream/prices` etc.) when
   they come back online.
-- A backfill endpoint `GET /v1/events?since=<timestamp>` is planned
-  for v1.1 (RFC-019).
+
+### 7.7.1 GET /v1/events example
+
+```http
+GET /v1/events?since=1748520000&page_size=50 HTTP/1.1
+Authorization: Bearer <jwt with events:read>
+X-Spec-Version: 1.1.0-rc1
+```
+
+```json
+{
+  "items": [
+    {
+      "delivery_id":  "<UUID v4>",
+      "signature":    "t=1748520123,v1=8a4c6e1...",
+      "spec_version": "1.1.0-rc1",
+      "payload": {
+        "event_id":   "<UUID v4>",
+        "event_type": "pricing.price_updated",
+        "created_at": "2026-05-29T14:30:00Z",
+        "region_code": "KE-30",
+        "sku_code":   "TOMATO_GRADE_A",
+        "window":     "30d",
+        "sample_size": 142
+      }
+    }
+  ],
+  "next_page_token": "eyJ2..."
+}
+```
+
+`since` older than the retention window returns `400 invalid_request`
+with detail `"since older than retention window"`.
 
 ## 7.8 Health-check event
 

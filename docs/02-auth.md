@@ -133,6 +133,8 @@ Content-Type: application/json
 | `downstream:benchmarks`     | GET peer benchmarks.                              |
 | `downstream:marketplace`    | GET buyer-posted sourcing orders.                 |
 | `downstream:procurement`    | GET group-buy opportunities.                      |
+| `events:read` (v1.1)        | GET backfilled webhook event deliveries.          |
+| `marketplace:respond` (v1.1) | POST responses to marketplace orders.            |
 
 Scopes are **least-privilege**. A token issued for `downstream:prices`
 cannot be used to call `/v1/upstream/yields`; the server returns

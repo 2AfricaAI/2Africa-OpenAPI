@@ -15,7 +15,7 @@ from .models import (
     PriceRecord, GapRecord, Money, Quantity, to_dict,
 )
 
-SpecVersion = "1.0.0-rc1"
+SpecVersion = "1.1.0-rc1"
 
 
 class _HttpBase:
@@ -121,6 +121,39 @@ class _Privacy(_HttpBase):
         return ManifestAck(**body)
 
 
+
+class _Events(_HttpBase):
+    def since(self, *, since: int, event_type: str | None = None,
+              page_token: str | None = None, page_size: int = 50) -> Dict:
+        """RFC-019 backfill. Returns historical webhook deliveries since `since`."""
+        params: Dict = {"since": since, "page_size": page_size}
+        if event_type: params["event_type"] = event_type
+        if page_token: params["page_token"] = page_token
+        return self._parent._get("/v1/events", params)
+
+
+class _MarketplaceResponses(_HttpBase):
+    def respond(self, *, order_id: str, seller_pseudo_id: str,
+                offered_quantity: Dict, offered_unit_price: Dict,
+                available_from: str, available_until: str,
+                notes: str | None = None) -> Dict:
+        """RFC-021 in-protocol response to a marketplace order."""
+        body = {
+            "seller_pseudo_id":   seller_pseudo_id,
+            "offered_quantity":   offered_quantity,
+            "offered_unit_price": offered_unit_price,
+            "available_from":     available_from,
+            "available_until":    available_until,
+        }
+        if notes is not None: body["notes"] = notes
+        return self._parent._post(
+            f"/v1/downstream/marketplace/{order_id}/responses",
+            body,
+            manifest_required=False,
+            expected=201,
+        )
+
+
 class TwoAfricaClient:
     """High-level facade for the 2Africa OpenAPI."""
 
@@ -142,6 +175,8 @@ class TwoAfricaClient:
         self.upstream   = _Upstream(self)
         self.downstream = _Downstream(self)
         self.privacy    = _Privacy(self)
+        self.events     = _Events(self)
+        self.marketplace_responses = _MarketplaceResponses(self)
 
     # ---- system -------------------------------------------------------
     def healthz(self) -> Dict:

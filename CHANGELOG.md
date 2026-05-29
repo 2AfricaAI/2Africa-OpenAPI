@@ -45,6 +45,44 @@ signal upcoming removals; deprecations also appear in this log under a
 
 ---
 
+## [1.1.0-rc1] — 2026-05-29
+
+Second release candidate. Two new endpoints land via the formal RFC
+process — first end-to-end exercise of GOVERNANCE.md §2.2.
+
+### Added
+
+- **RFC-019**: `GET /v1/events?since=<unix_seconds>` — webhook backfill
+  endpoint. Retention ≥ 30 days. New scope `events:read`. Rows mirror
+  live-delivery bytes for identical signature verification. Closes the
+  receiver-offline-beyond-24h gap noted in v1.0 webhooks.asyncapi.yaml.
+- **RFC-021**: `POST /v1/downstream/marketplace/{order_id}/responses` —
+  in-protocol marketplace response. New scope `marketplace:respond`
+  (NOT implied by `downstream:marketplace`). New webhook event
+  `marketplace.response_received` delivered to the buyer.
+- 4 new component schemas: EventReplayRow, EventReplayPage,
+  MarketplaceResponse, MarketplaceResponseAck.
+- 2 new OAuth scopes wired into authorizationCode flow.
+- docs: §6.5.1 marketplace response, §7.7 + §7.7.1 webhook backfill,
+  §2.4 scope table updates.
+- SDKs: `client.events.since(since)` + `client.marketplace_responses.respond(order_id, ...)`
+  in both Python (`twoafrica-openapi==1.1.0rc1`) and JS (`@2africa/openapi@1.1.0-rc1`).
+- CTS: 2 new L2 tests covering the new endpoints.
+- `rfcs/` directory established with template + RFC-019 + RFC-021.
+
+### Changed
+
+- spec/openapi.yaml: 12 → 14 paths, 23 → 27 schemas, 11 → 13 scopes.
+- Conformance L2 description now reads "all 12 endpoints + signed
+  webhook delivery + event backfill".
+
+### Backwards compatibility
+
+Pure MINOR. No existing v1.0 client is broken. New endpoints + scopes
+are additive; existing endpoints' wire shape is unchanged.
+
+---
+
 ## [1.0.0-rc1] — 2026-05-29
 
 First release candidate of the v1.0 specification. The wire contract
@@ -128,6 +166,7 @@ only.
 - Lint: `.spectral.yml` + `.markdownlint.json`.
 - CI: `spec-lint.yml`, `markdown-lint.yml`.
 
-[Unreleased]: https://github.com/2AfricaAI/2Africa-OpenAPI/compare/v1.0.0-rc1...HEAD
+[Unreleased]: https://github.com/2AfricaAI/2Africa-OpenAPI/compare/v1.1.0-rc1...HEAD
+[1.1.0-rc1]: https://github.com/2AfricaAI/2Africa-OpenAPI/compare/v1.0.0-rc1...v1.1.0-rc1
 [1.0.0-rc1]: https://github.com/2AfricaAI/2Africa-OpenAPI/compare/v0.1.0-skeleton...v1.0.0-rc1
 [0.1.0-skeleton]: https://github.com/2AfricaAI/2Africa-OpenAPI/releases/tag/v0.1.0-skeleton

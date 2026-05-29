@@ -185,6 +185,49 @@ Row schema:
 The buyer commits via the platform UI; v1.0 does not include a
 commit endpoint in the spec.
 
+### 6.5.1 POST /v1/downstream/marketplace/{order_id}/responses (v1.1)
+
+Added in v1.1 (RFC-021). Lets a seller submit an in-protocol response
+to a marketplace order so the audit trail and the Privacy Manifest
+allow-list both cover what used to happen out-of-band.
+
+Required scope: `marketplace:respond` (not implied by
+`downstream:marketplace`).
+
+Body:
+
+```json
+{
+  "seller_pseudo_id":   "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "offered_quantity":   { "quantity": 5000, "unit": "kg" },
+  "offered_unit_price": { "amount": "78.50", "currency": "KES" },
+  "available_from":     "2026-06-01",
+  "available_until":    "2026-06-10",
+  "notes":              "Free delivery within KE-30 for orders >= 1 t."
+}
+```
+
+Response 201:
+
+```json
+{
+  "response_id":    "<UUID v4>",
+  "order_id":       "<UUID v4>",
+  "accepted_at":    "2026-05-29T14:30:00Z",
+  "buyer_notified": true
+}
+```
+
+Servers MUST reject:
+
+- `404 Not Found` if `order_id` does not exist.
+- `410 Gone` if the order has expired.
+- `409 Conflict` if the same `seller_pseudo_id` already responded to
+  this `order_id`.
+
+After acceptance, the server delivers `marketplace.response_received`
+to the buyer (new webhook event added in v1.1).
+
 ## 6.7 Caching guidance
 
 | Endpoint        | Typical `max-age` | Invalidate on webhook                |

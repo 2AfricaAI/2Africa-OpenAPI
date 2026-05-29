@@ -147,14 +147,16 @@ See [LICENSE-spec](./LICENSE-spec), [LICENSE-sdk](./LICENSE-sdk), and
 
 ## Status
 
-The current release candidate is **`v1.0.0-rc1`**.
+The current release candidate is **`v1.1.0-rc1`**.
 
-| Milestone                                 | Status           |
-| ----------------------------------------- | ---------------- |
-| `v0.1.0-skeleton` — Sprint 0 done         | done             |
-| `v1.0.0-rc1`     — Sprint 1 spec complete | done             |
-| `v1.0.0`         — public spec freeze     | pending implementer feedback |
-| `v1.0.0` SDKs published (Maven / PyPI / npm) — Sprint 2 | +3 days   |
+| Milestone                                                                | Status            |
+| ------------------------------------------------------------------------ | ----------------- |
+| `v0.1.0-skeleton` — Sprint 0 done                                        | done              |
+| `v1.0.0-rc1`     — Sprint 1 spec complete                                | done              |
+| `v1.1.0-rc1`     — Sprint 2 SDKs + helpers + CTS + RFC-019 + RFC-021     | done              |
+| `v1.0.0`         — public spec freeze                                    | pending feedback  |
+| Python `twoafrica-openapi` published to PyPI                             | dry-run ready     |
+| JS `@2africa/openapi` published to npm                                   | dry-run ready     |
 
 ## Get involved
 

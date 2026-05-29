@@ -7,7 +7,7 @@ import type {
   ProcurementOpportunity, RegionalPrice, TelemetryEvent, YieldRecord,
 } from "./models.ts";
 
-export const SpecVersion = "1.0.0-rc1";
+export const SpecVersion = "1.1.0-rc1";
 
 export interface TwoAfricaClientOptions {
   baseUrl: string;
@@ -40,6 +40,8 @@ export class TwoAfricaClient {
   readonly upstream:   UpstreamAPI;
   readonly downstream: DownstreamAPI;
   readonly privacy:    PrivacyAPI;
+  readonly events:     EventsAPI;
+  readonly marketplaceResponses: MarketplaceResponsesAPI;
 
   constructor(opts: TwoAfricaClientOptions) {
     this.baseUrl      = opts.baseUrl.replace(/\/+$/, "");
@@ -51,6 +53,8 @@ export class TwoAfricaClient {
     this.upstream   = new UpstreamAPI(this);
     this.downstream = new DownstreamAPI(this);
     this.privacy    = new PrivacyAPI(this);
+    this.events     = new EventsAPI(this);
+    this.marketplaceResponses = new MarketplaceResponsesAPI(this);
   }
 
   async healthz(): Promise<{ status: "ok"|"degraded"; spec_version: string; server_time: string }> {
@@ -177,5 +181,47 @@ export class PrivacyAPI {
     const ack = await r.json() as ManifestAck;
     this.c.manifestHash = ack.manifest_hash;
     return ack;
+  }
+}
+
+
+export class EventsAPI {
+  private c: TwoAfricaClient;
+  constructor(c: TwoAfricaClient) { this.c = c; }
+  since(args: { since: number; eventType?: string; pageToken?: string; pageSize?: number }): Promise<{ items: any[]; next_page_token?: string }> {
+    return this.c.get("/v1/events", {
+      since: args.since,
+      event_type: args.eventType,
+      page_token: args.pageToken,
+      page_size:  args.pageSize ?? 50,
+    });
+  }
+}
+
+export class MarketplaceResponsesAPI {
+  private c: TwoAfricaClient;
+  constructor(c: TwoAfricaClient) { this.c = c; }
+  respond(args: {
+    orderId: string;
+    sellerPseudoId: string;
+    offeredQuantity:  { quantity: number; unit: string };
+    offeredUnitPrice: { amount: string; currency: string };
+    availableFrom:  string;
+    availableUntil: string;
+    notes?: string;
+  }): Promise<{ response_id: string; order_id: string; accepted_at: string; buyer_notified: boolean }> {
+    const body: Record<string, unknown> = {
+      seller_pseudo_id:   args.sellerPseudoId,
+      offered_quantity:   args.offeredQuantity,
+      offered_unit_price: args.offeredUnitPrice,
+      available_from:     args.availableFrom,
+      available_until:    args.availableUntil,
+    };
+    if (args.notes !== undefined) body.notes = args.notes;
+    return this.c.post(
+      `/v1/downstream/marketplace/${encodeURIComponent(args.orderId)}/responses`,
+      body,
+      { manifestRequired: false, expected: 201 }
+    );
   }
 }

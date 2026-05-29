@@ -41,4 +41,4 @@ __all__ = [
     "GapRecord", "CreditPack", "TelemetryEvent", "RegionalPrice", "Benchmark",
 ]
 
-__version__ = "1.0.0-rc1"
+__version__ = "1.1.0-rc1"
