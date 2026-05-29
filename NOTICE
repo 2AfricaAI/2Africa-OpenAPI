@@ -1,0 +1,73 @@
+2Africa OpenAPI
+Copyright 2026 2Africa AI and OpenAPI Contributors
+
+This repository contains two distinct works under two distinct licenses:
+
+────────────────────────────────────────────────────────────────────────
+1. THE SPECIFICATION  (CC BY 4.0 — see LICENSE-spec)
+────────────────────────────────────────────────────────────────────────
+   - spec/openapi.yaml                    — OpenAPI 3.1 description
+   - spec/privacy-manifest.schema.yaml    — Privacy Manifest JSON Schema
+   - spec/webhooks.asyncapi.yaml          — AsyncAPI 2.6 webhook events
+   - docs/**                              — Specification documentation
+
+   Anyone may build a client or server that conforms to this
+   specification, in any language, for any purpose, including
+   commercial — provided attribution is given to the standard.
+
+────────────────────────────────────────────────────────────────────────
+2. THE REFERENCE SDKs  (Apache-2.0 — see LICENSE-sdk)
+────────────────────────────────────────────────────────────────────────
+   - sdks/java/**         — Java reference SDK
+   - sdks/python/**       — Python reference SDK
+   - sdks/javascript/**   — JavaScript / TypeScript reference SDK
+
+   The SDKs are generated from spec/openapi.yaml using OpenAPI
+   Generator and refined by hand. They are licensed under Apache-2.0
+   to match the dominant license used by the African open-source
+   ecosystem (Spring Boot, Apache Kafka, etc.) and to permit
+   frictionless use inside both open-source and proprietary products.
+
+────────────────────────────────────────────────────────────────────────
+3. EXAMPLES & TESTS  (Apache-2.0)
+────────────────────────────────────────────────────────────────────────
+   - examples/**, tests/** are licensed under Apache-2.0 (LICENSE-sdk).
+
+────────────────────────────────────────────────────────────────────────
+Why dual licensing?
+────────────────────────────────────────────────────────────────────────
+A specification and its reference implementation serve different
+purposes. The specification benefits from a documentation-style
+license (CC BY 4.0) that emphasises attribution; the reference code
+benefits from a software-style license (Apache-2.0) that grants
+explicit patent rights and is universally accepted by both open and
+closed downstreams.
+
+This is the same pattern used by, for example, OpenAPI Initiative
+(spec under MIT/CC BY, tooling under Apache-2.0) and the CNCF
+landscape.
+
+────────────────────────────────────────────────────────────────────────
+Third-party notices
+────────────────────────────────────────────────────────────────────────
+This Work uses concepts from the following public standards:
+  - RFC 6749  OAuth 2.0 Authorization Framework
+  - RFC 7636  Proof Key for Code Exchange (PKCE)
+  - RFC 7519  JSON Web Token (JWT)
+  - RFC 7807  Problem Details for HTTP APIs
+  - RFC 8259  JSON
+  - ISO 8601  Date and Time
+  - ISO 3166  Country and Subdivision Codes
+  - ISO 4217  Currency Codes
+  - OpenAPI 3.1.0 (OpenAPI Initiative)
+  - AsyncAPI 2.6 (AsyncAPI Initiative)
+
+No code from these standards is incorporated; only behavioural
+references.
+
+────────────────────────────────────────────────────────────────────────
+Contact
+────────────────────────────────────────────────────────────────────────
+  Security issues:    security@2africa.ai
+  Licensing inquiry:  legal@2africa.ai
+  General:            https://github.com/2AfricaAI/2Africa-OpenAPI

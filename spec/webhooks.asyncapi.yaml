@@ -1,0 +1,69 @@
+# SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# 2Africa OpenAPI — Webhook events (AgriCloud → AgriOS)
+# Skeleton placeholder. Full event catalogue lands in Sprint 1.
+
+asyncapi: 2.6.0
+
+info:
+  title: 2Africa OpenAPI Webhooks
+  version: 0.1.0-skeleton
+  description: |
+    AgriCloud (or any conformant server) signs and POSTs event payloads
+    to subscribed AgriOS clients. Signature: `X-AgriCloud-Signature:
+    t=<unix>,v1=<hex>` (HMAC-SHA256 over `t.body`). Anti-replay window
+    5 minutes; retries 1m → 5m → 30m → 2h → 6h.
+
+    Sprint 1 fills in the full set of channels: price.updated,
+    benchmark.refreshed, marketplace.order.posted,
+    procurement.opportunity.opened, telemetry.config.changed.
+
+defaultContentType: application/json
+
+channels:
+
+  system.healthcheck:
+    description: |
+      Skeleton placeholder. A test event used to validate signature
+      verification end-to-end during conformance testing.
+    subscribe:
+      operationId: receiveHealthcheck
+      summary: Receive a health-check webhook.
+      message:
+        $ref: '#/components/messages/HealthcheckEvent'
+
+components:
+
+  messages:
+
+    HealthcheckEvent:
+      name: HealthcheckEvent
+      title: Webhook health-check
+      contentType: application/json
+      payload:
+        type: object
+        additionalProperties: false
+        required: [event_id, event_type, created_at]
+        properties:
+          event_id:
+            type: string
+            format: uuid
+            description: Idempotency key; receivers must dedupe.
+          event_type:
+            type: string
+            const: system.healthcheck
+          created_at:
+            type: string
+            format: date-time
+            description: ISO 8601 UTC.
+      headers:
+        type: object
+        required: [X-AgriCloud-Signature, X-AgriCloud-Spec-Version]
+        properties:
+          X-AgriCloud-Signature:
+            type: string
+            pattern: '^t=\d+,v1=[0-9a-f]{64}$'
+          X-AgriCloud-Spec-Version:
+            type: string
+            pattern: '^\d+\.\d+\.\d+(-[A-Za-z0-9\-\.]+)?$'

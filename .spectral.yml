@@ -1,0 +1,107 @@
+# SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# Spectral lint config for 2Africa OpenAPI.
+# https://meta.stoplight.io/docs/spectral/
+
+extends:
+  - spectral:oas
+  - spectral:asyncapi
+
+formats:
+  - oas3_1
+
+rules:
+
+  # ─── Baseline OAS rules (already on by `spectral:oas`) ────────────
+  oas3-api-servers: error
+  operation-operationId: error
+  operation-operationId-unique: error
+  operation-tag-defined: error
+  no-$ref-siblings: error
+
+  # ─── Project-specific style rules ──────────────────────────────────
+
+  # 2A-001 · JSON property names must be snake_case.
+  2a-property-snake-case:
+    description: JSON properties MUST be snake_case (e.g. `crop_code`, not `cropCode`).
+    severity: error
+    given: $.components.schemas..properties.*~
+    then:
+      function: pattern
+      functionOptions:
+        match: '^[a-z][a-z0-9_]*$'
+
+  # 2A-002 · URL paths must be kebab-case.
+  2a-path-kebab-case:
+    description: |
+      URL paths MUST be kebab-case (e.g. `/v1/upstream/credit-pack`,
+      not `/v1/upstream/creditPack`).
+    severity: error
+    given: $.paths[*]~
+    then:
+      function: pattern
+      functionOptions:
+        match: '^(\/[a-z0-9\-]+(\{[a-zA-Z_][a-zA-Z0-9_]*\})?)+\/?$|^\/$'
+
+  # 2A-003 · Every endpoint must declare an operationId.
+  2a-operationid-required:
+    description: Every operation MUST have an operationId.
+    severity: error
+    given: $.paths[*][get,put,post,delete,patch,options,head,trace]
+    then:
+      field: operationId
+      function: truthy
+
+  # 2A-004 · Every endpoint must have at least one tag.
+  2a-tag-required:
+    description: Every operation SHOULD have at least one tag.
+    severity: warn
+    given: $.paths[*][get,put,post,delete,patch,options,head,trace]
+    then:
+      field: tags
+      function: length
+      functionOptions:
+        min: 1
+
+  # 2A-005 · OpenAPI version pin.
+  2a-openapi-version-pin:
+    description: The OpenAPI version MUST be 3.1.x.
+    severity: error
+    given: $.openapi
+    then:
+      function: pattern
+      functionOptions:
+        match: '^3\.1\.'
+
+  # 2A-006 · License object must be present and CC-BY-4.0.
+  2a-spec-license:
+    description: The spec MUST declare itself under CC BY 4.0.
+    severity: error
+    given: $.info.license.identifier
+    then:
+      function: pattern
+      functionOptions:
+        match: '^CC-BY-4\.0$'
+
+  # 2A-007 · Server URLs must use https.
+  2a-https-servers:
+    description: All servers MUST use https.
+    severity: error
+    given: $.servers[*].url
+    then:
+      function: pattern
+      functionOptions:
+        match: '^https://'
+
+  # 2A-008 · Discourage offset/limit pagination in favour of cursors.
+  2a-no-offset-pagination:
+    description: |
+      Pagination MUST be cursor-based. Parameters named `offset` or
+      `limit` are not permitted; use `page_token` and `page_size`.
+    severity: error
+    given: $.paths[*][*].parameters[?(@.in == 'query')].name
+    then:
+      function: pattern
+      functionOptions:
+        notMatch: '^(offset|limit)$'

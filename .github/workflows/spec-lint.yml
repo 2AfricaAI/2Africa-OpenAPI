@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+name: Spec Lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'spec/**'
+      - '.spectral.yml'
+      - '.github/workflows/spec-lint.yml'
+  pull_request:
+    paths:
+      - 'spec/**'
+      - '.spectral.yml'
+      - '.github/workflows/spec-lint.yml'
+
+jobs:
+  spectral:
+    name: Spectral lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Spectral
+        run: npm install -g @stoplight/spectral-cli@^6.11
+
+      - name: Lint OpenAPI 3.1 spec
+        run: spectral lint --ruleset .spectral.yml spec/openapi.yaml
+
+      - name: Lint AsyncAPI 2.6 spec
+        run: spectral lint --ruleset .spectral.yml spec/webhooks.asyncapi.yaml
+
+      - name: Validate Privacy Manifest JSON Schema syntactically
+        run: |
+          npx --yes ajv-cli@5 compile \
+            --spec=draft2020 \
+            -s spec/privacy-manifest.schema.yaml

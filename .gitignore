@@ -1,0 +1,63 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+dist/
+build/
+out/
+*.log
+
+# Node / JS SDK
+node_modules/
+*.tsbuildinfo
+.npm/
+.pnp.*
+coverage/
+
+# Python SDK
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.venv/
+venv/
+
+# Java SDK
+target/
+*.class
+.gradle/
+.mvn/wrapper/maven-wrapper.jar
+
+# OpenAPI Generator
+.openapi-generator/
+.openapi-generator-ignore.bak
+
+# Spectral / Redocly
+.redocly.lint-ignore.yaml
+
+# Local-only docs (internal PRD docx — never commit)
+docs/internal/
+*.docx
+*.doc
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/

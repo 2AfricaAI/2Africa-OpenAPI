@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# Privacy Manifest — JSON Schema
+# Skeleton placeholder. Full schema lands in Sprint 1.
+#
+# The Privacy Manifest is a YAML document authored by the data owner
+# (typically a farm administrator) that declares, per upstream
+# endpoint, which fields the platform is permitted to receive. Every
+# upstream request must carry the SHA-256 hash of the canonicalised
+# manifest in the `X-Privacy-Manifest-Hash` header; the server rejects
+# requests whose body exceeds the manifest's allow list.
+
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: https://standards.2africa.ai/privacy-manifest/v1.json
+title: 2Africa OpenAPI Privacy Manifest
+description: |
+  Declarative consent document. Skeleton placeholder — Sprint 1 fills
+  in the full per-endpoint field-allow-list structure.
+type: object
+additionalProperties: false
+
+properties:
+  manifest_version:
+    type: string
+    pattern: '^\d+\.\d+\.\d+$'
+    description: SemVer of the manifest format itself.
+    examples: ['1.0.0']
+
+  profile:
+    type: string
+    enum: [strict, balanced, open, custom]
+    description: |
+      Preset that the manifest was derived from.
+      - `strict`   — minimal sharing (default for new tenants)
+      - `balanced` — recommended for most farms (Sprint 1 default)
+      - `open`     — share by default, opt-out per field
+      - `custom`   — manifest deviates from the presets
+    default: balanced
+
+  generated_at:
+    type: string
+    format: date-time
+    description: ISO 8601 UTC timestamp of manifest generation.
+
+required: [manifest_version, profile, generated_at]

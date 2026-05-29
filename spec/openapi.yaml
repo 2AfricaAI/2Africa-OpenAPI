@@ -1,0 +1,157 @@
+# SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# 2Africa OpenAPI — Federation Protocol
+# Skeleton release v0.1.0-skeleton — Sprint 1 will replace this with the
+# full 10-endpoint surface, error schemas, and security schemes.
+#
+# This file is the *canonical* form of the standard. The Markdown
+# documentation under docs/ explains *why*; this YAML is *what*.
+
+openapi: 3.1.0
+
+info:
+  title: 2Africa OpenAPI
+  summary: Open federation protocol for African agricultural data exchange.
+  description: |
+    A vendor-neutral specification defining how single-farm operating
+    systems and multi-tenant agricultural platforms exchange data.
+
+    **This is a skeleton release (`v0.1.0-skeleton`).** Only the
+    `GET /healthz` endpoint is defined; the full surface lands in
+    Sprint 1 (`v1.0.0-rc1`).
+
+    See: https://github.com/2AfricaAI/2Africa-OpenAPI
+  version: 0.1.0-skeleton
+  contact:
+    name: 2Africa OpenAPI Maintainers
+    url: https://github.com/2AfricaAI/2Africa-OpenAPI
+    email: openapi@2africa.ai
+  license:
+    name: CC BY 4.0
+    identifier: CC-BY-4.0
+  x-spec-license: CC-BY-4.0
+  x-sdk-license: Apache-2.0
+
+servers:
+  - url: https://api.agricloud.2africa.ai
+    description: Reference production server (AgriCloud)
+  - url: https://sandbox.agricloud.2africa.ai
+    description: Reference sandbox (free, 7-day token renewal)
+  - url: https://{host}
+    description: Self-hosted conformant implementation
+    variables:
+      host:
+        default: api.example.com
+        description: Host of a third-party conformant implementation.
+
+tags:
+  - name: System
+    description: Operational endpoints (no authentication required).
+
+paths:
+  /healthz:
+    get:
+      operationId: getHealthz
+      summary: Liveness probe.
+      description: |
+        Returns a fixed payload indicating that the server is reachable
+        and the spec version it implements. Intended for load balancers
+        and conformance test suites.
+
+        This endpoint is intentionally unauthenticated and never
+        rate-limited, but implementers MAY reject requests that do not
+        come from configured probe sources.
+      tags: [System]
+      security: []     # explicitly public
+      responses:
+        '200':
+          description: Server is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              examples:
+                ok:
+                  summary: Healthy server
+                  value:
+                    status: ok
+                    spec_version: 0.1.0-skeleton
+                    server_time: '2026-05-29T14:30:00Z'
+
+components:
+  schemas:
+
+    HealthStatus:
+      type: object
+      additionalProperties: false
+      required: [status, spec_version, server_time]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+          description: |
+            `ok` — the server is fully operational.
+            `degraded` — the server is up but some downstream
+            dependency is impaired; calls may still succeed.
+        spec_version:
+          type: string
+          description: The OpenAPI spec version this server implements.
+          example: 0.1.0-skeleton
+          pattern: '^\d+\.\d+\.\d+(-[A-Za-z0-9\-\.]+)?$'
+        server_time:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC timestamp.
+          example: '2026-05-29T14:30:00Z'
+
+    Problem:
+      # RFC 7807 placeholder — full error model lands in Sprint 1.
+      type: object
+      description: |
+        RFC 7807 Problem Details. Documented here as a placeholder so
+        Spectral does not flag the lack of an error schema in the
+        skeleton; populated in Sprint 1.
+      properties:
+        type:
+          type: string
+          format: uri
+          example: https://errors.2africa.ai/not-implemented
+        title:
+          type: string
+          example: Not Implemented
+        status:
+          type: integer
+          minimum: 100
+          maximum: 599
+          example: 501
+        detail:
+          type: string
+          example: Endpoint will be defined in Sprint 1.
+        instance:
+          type: string
+          format: uri-reference
+
+  securitySchemes:
+    OAuth2:
+      # Placeholder. Full scopes table lands in Sprint 1 (spec §2.4).
+      type: oauth2
+      description: |
+        OAuth 2.0 + PKCE (RFC 6749 + RFC 7636). Scopes will be
+        enumerated in Sprint 1.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://api.agricloud.2africa.ai/oauth/authorize
+          tokenUrl: https://api.agricloud.2africa.ai/oauth/token
+          refreshUrl: https://api.agricloud.2africa.ai/oauth/refresh
+          scopes:
+            'upstream:yields': Submit anonymous harvest yields.
+        clientCredentials:
+          tokenUrl: https://api.agricloud.2africa.ai/oauth/token
+          scopes:
+            'upstream:telemetry': Submit anonymous telemetry.
+
+security:
+  # Default: most endpoints require OAuth2. `/healthz` opts out
+  # explicitly with `security: []`.
+  - OAuth2: []

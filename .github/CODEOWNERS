@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
+# SPDX-License-Identifier: CC-BY-4.0
+#
+# Reviewers required for protected paths.
+# Until the Steering Committee is convened (see GOVERNANCE.md §5),
+# 2Africa AI maintains all paths.
+
+*                       @2AfricaAI/openapi-maintainers
+/spec/                  @2AfricaAI/openapi-maintainers
+/docs/                  @2AfricaAI/openapi-maintainers
+/GOVERNANCE.md          @2AfricaAI/openapi-maintainers
+/.github/               @2AfricaAI/openapi-maintainers
+/sdks/                  @2AfricaAI/openapi-sdk-maintainers
