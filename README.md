@@ -47,26 +47,26 @@ implementer.
 
 | If you are…                                  | Start at                                |
 | -------------------------------------------- | --------------------------------------- |
-| A farm-management vendor                     | [`docs/upstream.md`](./docs/upstream.md) (when written) |
-| A bank / insurer / certifier                 | [`docs/downstream.md`](./docs/downstream.md) (when written) |
-| A platform building federation               | [`docs/auth.md`](./docs/auth.md) (when written) |
-| An end-user farmer choosing software         | [`docs/privacy.md`](./docs/privacy.md) (when written) |
-| A regulator                                  | [`docs/compliance.md`](./docs/compliance.md) (when written) |
-| An SDK consumer                              | [`sdks/`](./sdks)                       |
+| A farm-management vendor                     | [`docs/05-upstream.md`](./docs/05-upstream.md)       |
+| A bank / insurer / certifier                 | [`docs/06-downstream.md`](./docs/06-downstream.md)   |
+| A platform building federation               | [`docs/02-auth.md`](./docs/02-auth.md), [`docs/07-webhooks.md`](./docs/07-webhooks.md) |
+| An end-user farmer choosing software         | [`docs/04-privacy.md`](./docs/04-privacy.md)         |
+| A regulator                                  | [`docs/10-compliance.md`](./docs/10-compliance.md)   |
+| An SDK consumer                              | [`docs/09-sdks.md`](./docs/09-sdks.md), [`sdks/`](./sdks) |
 
-> Note: the per-chapter Markdown files are scheduled for **Sprint 1**.
-> Until then the canonical source is the OpenAPI 3.1 YAML in
-> [`spec/openapi.yaml`](./spec/openapi.yaml).
+Browse the full chapter index in [`docs/README.md`](./docs/README.md)
+or visit the rendered Redocly site at
+<https://2africaai.github.io/2Africa-OpenAPI/>.
 
 ## Repository layout
 
 ```
 .
 ├── spec/                          OpenAPI 3.1 + AsyncAPI 2.6 + JSON Schema
-│   ├── openapi.yaml               main HTTP API (10 endpoints, Sprint 1)
-│   ├── privacy-manifest.schema.yaml   Privacy Manifest format (Sprint 1)
-│   └── webhooks.asyncapi.yaml         webhook event channel (Sprint 1)
-├── docs/                          long-form docs (8–10 chapters, Sprint 1)
+│   ├── openapi.yaml               main HTTP API (12 paths, 23 schemas)
+│   ├── privacy-manifest.schema.yaml   Privacy Manifest (JSON Schema 2020-12)
+│   └── webhooks.asyncapi.yaml         6 webhook event channels
+├── docs/                          long-form docs (11 chapters + 2 appendices)
 ├── sdks/
 │   ├── java/                      reference Java SDK   (Sprint 2)
 │   ├── python/                    reference Python SDK (Sprint 2)
@@ -147,13 +147,13 @@ See [LICENSE-spec](./LICENSE-spec), [LICENSE-sdk](./LICENSE-sdk), and
 
 ## Status
 
-This is a **pre-release skeleton** (`v0.1.0-skeleton`).
+The current release candidate is **`v1.0.0-rc1`**.
 
-| Milestone                                 | ETA              |
+| Milestone                                 | Status           |
 | ----------------------------------------- | ---------------- |
-| `v0.1.0-skeleton` — Sprint 0 done         | now              |
-| `v1.0.0-rc1`     — Sprint 1 spec complete | +3–4 days        |
-| `v1.0.0`         — public spec freeze     | shortly after rc |
+| `v0.1.0-skeleton` — Sprint 0 done         | done             |
+| `v1.0.0-rc1`     — Sprint 1 spec complete | done             |
+| `v1.0.0`         — public spec freeze     | pending implementer feedback |
 | `v1.0.0` SDKs published (Maven / PyPI / npm) — Sprint 2 | +3 days   |
 
 ## Get involved
