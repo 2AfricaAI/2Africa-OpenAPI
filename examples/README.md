@@ -11,7 +11,7 @@ Apache-2.0. Copy and adapt freely.
 
 ```
 examples/
-├── postman-collection.json          Postman v2.1, 12 endpoints
+├── postman-collection.json          Postman v2.1, 11 requests
 ├── curl/                            One shell script per endpoint
 │   ├── 01-healthz.sh
 │   ├── 02-publish-manifest.sh
@@ -29,9 +29,16 @@ examples/
 │   ├── strict.yaml
 │   ├── balanced.yaml                ← recommended default
 │   └── open.yaml
-└── webhook-replay/
-    └── verify_signature.py          Reference HMAC-SHA256 verifier
+├── helpers/                         ← Single-file zero-dep utilities (Sprint 2)
+│   ├── python/  · pkce.py · manifest_hash.py · webhook_verify.py · jwt_validate.py
+│   ├── java/    · Pkce.java · ManifestHash.java · WebhookVerify.java · JwtValidate.java
+│   └── js/      · pkce.ts · manifest-hash.ts · webhook-verify.ts · jwt-validate.ts
+└── webhook-replay/                  ← DEPRECATED, see helpers/python/webhook_verify.py
+    └── verify_signature.py
 ```
+
+See [`helpers/README.md`](./helpers/README.md) for the helper coverage matrix
+and `curl` vendor instructions.
 
 ## Running the curl examples
 
@@ -47,6 +54,9 @@ export MANIFEST_HASH=sha256:<hash of your active Privacy Manifest>
 ./curl/03-upstream-yields.sh
 ```
 
+The `MANIFEST_HASH` value is what `helpers/python/manifest_hash.py` (or its
+Java / JS sibling) produces from your manifest file.
+
 ## Loading the Postman Collection
 
 1. Import `postman-collection.json` into Postman.
@@ -57,9 +67,11 @@ export MANIFEST_HASH=sha256:<hash of your active Privacy Manifest>
 ## Verifying a webhook signature
 
 ```bash
-python3 webhook-replay/verify_signature.py    # self-test
+python3 helpers/python/webhook_verify.py    # self-test
 ```
 
-In your own server, import `verify_signature` and call it with the
+Or in your own server, import `verify_signature` and call it with the
 raw bytes of the request body (before any JSON parsing) and the
-`X-AgriCloud-Signature` header.
+`X-AgriCloud-Signature` header. The same helper exists in Java
+(`helpers/java/WebhookVerify.java`) and TypeScript
+(`helpers/js/webhook-verify.ts`).

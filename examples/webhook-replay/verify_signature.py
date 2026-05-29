@@ -1,65 +1,26 @@
-#!/usr/bin/env python3
-# SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
-# SPDX-License-Identifier: Apache-2.0
 """
-Reference HMAC-SHA256 verifier for 2Africa OpenAPI webhooks.
+SPDX-License-Identifier: Apache-2.0
 
-    X-AgriCloud-Signature: t=<unix>,v1=<hex>
-    secret_key = the value provisioned at subscription time
-    HMAC body  = f"{t}.{raw_body}".encode("utf-8")
+DEPRECATED PATH — kept for backwards compatibility with the v1.0.0-rc1
+release. The maintained version lives at:
 
-Reject if:
-  - signature header malformed
-  - timestamp differs from now() by more than 300 seconds (replay)
-  - computed HMAC != supplied HMAC (constant-time compare)
+    examples/helpers/python/webhook_verify.py
 
-Typical usage in a Flask/Starlette handler:
+Update your vendored copy:
 
-    raw = request.get_data()   # MUST be the raw bytes, before parsing
-    verify_signature(
-        secret    = os.environ["WEBHOOK_SECRET"],
-        header    = request.headers["X-AgriCloud-Signature"],
-        raw_body  = raw,
-    )
+    curl -O https://raw.githubusercontent.com/2AfricaAI/2Africa-OpenAPI/main/examples/helpers/python/webhook_verify.py
+
+This file re-exports the helper for one more release. It will be
+removed in v1.0.0.
 """
-from __future__ import annotations
-import hashlib
-import hmac
-import re
-import time
-
-SIG_RE = re.compile(r"^t=(\d+),v1=([0-9a-f]{64})$")
-REPLAY_WINDOW_S = 300  # 5 minutes
-
-
-class SignatureError(Exception):
-    pass
-
-
-def verify_signature(secret: str, header: str, raw_body: bytes,
-                     now: float | None = None) -> None:
-    m = SIG_RE.match(header.strip())
-    if not m:
-        raise SignatureError("malformed X-AgriCloud-Signature header")
-    ts = int(m.group(1))
-    sig = m.group(2)
-    if abs((now or time.time()) - ts) > REPLAY_WINDOW_S:
-        raise SignatureError(f"timestamp outside {REPLAY_WINDOW_S}s window")
-    expected = hmac.new(
-        secret.encode("utf-8"),
-        f"{ts}.".encode("utf-8") + raw_body,
-        hashlib.sha256,
-    ).hexdigest()
-    if not hmac.compare_digest(expected, sig):
-        raise SignatureError("HMAC mismatch")
-
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "helpers", "python"))
+from webhook_verify import verify_signature, SignatureError, REPLAY_WINDOW_S  # noqa: F401
 
 if __name__ == "__main__":
-    # Self-test
-    secret = "whsec_demo_do_not_use_in_prod"
-    raw = b'{"event_id":"a","event_type":"system.healthcheck","created_at":"2026-05-29T14:30:00Z"}'
-    ts = int(time.time())
-    digest = hmac.new(secret.encode(), f"{ts}.".encode() + raw, hashlib.sha256).hexdigest()
-    header = f"t={ts},v1={digest}"
-    verify_signature(secret, header, raw)
-    print("OK: self-test verified", header[:25] + "...")
+    from webhook_verify import __file__ as new_path  # type: ignore
+    print(f"DEPRECATED: please use {new_path}")
+    # Run the new self-test
+    import runpy
+    runpy.run_path(new_path, run_name="__main__")
