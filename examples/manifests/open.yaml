@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Privacy Manifest - OPEN preset
+# All upstream endpoints ON. Use only when the tenant explicitly
+# wants maximum network value (e.g. participation in credit and
+# group-buy programmes). Credit-pack recipients still allow-listed.
+
+manifest_version: 1.0.0
+profile: open
+generated_at: '2026-05-29T14:30:00Z'
+owner_id: jane.doe@example-farm.ke
+notes: |
+  Open posture. Yields, prices, GAP, telemetry continuously on;
+  credit-pack one-shot to two pre-approved banks.
+
+endpoints:
+  yields:
+    enabled: true
+    region_floor: subdivision
+    retention_days: 730
+    rate_limit_per_hour: 200
+
+  prices:
+    enabled: true
+    region_floor: subdivision
+    retention_days: 730
+    rate_limit_per_hour: 200
+
+  gap_records:
+    enabled: true
+    region_floor: subdivision
+    retention_days: 1825
+    rate_limit_per_hour: 50
+
+  credit_pack:
+    enabled: true
+    region_floor: subdivision
+    retention_days: 1095   # 3 years for credit decisions
+    rate_limit_per_hour: 5
+    recipients:
+      - BANK_KCB
+      - BANK_EQUITY
+
+  telemetry:
+    enabled: true
+    region_floor: country
+    retention_days: 365
+    rate_limit_per_hour: 600

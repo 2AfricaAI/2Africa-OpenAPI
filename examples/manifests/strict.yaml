@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Privacy Manifest - STRICT preset
+# All upstream endpoints OFF except opt-in telemetry.
+# Use for tenants who want zero business-data sharing.
+
+manifest_version: 1.0.0
+profile: strict
+generated_at: '2026-05-29T14:30:00Z'
+owner_id: jane.doe@example-farm.ke
+notes: |
+  Strictest possible posture. Nothing leaves the farm except aggregate
+  client-health telemetry, which is opt-in. Suitable for newly
+  onboarded tenants or for farms under active legal review.
+
+endpoints:
+  telemetry:
+    enabled: true
+    allow_fields:
+      - events[].event
+      - events[].occurred_at
+      - events[].sdk_version
+      - events[].os
+    region_floor: country
+    retention_days: 30
+    rate_limit_per_hour: 60

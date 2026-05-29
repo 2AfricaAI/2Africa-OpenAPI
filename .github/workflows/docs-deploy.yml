@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Render spec/openapi.yaml with Redocly and publish to GitHub Pages.
+
+name: Docs Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'spec/openapi.yaml'
+      - 'docs/**'
+      - '.github/workflows/docs-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+
+  build:
+    name: Build Redocly site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Redocly CLI
+        run: npm install -g @redocly/cli@^1.25
+
+      - name: Build OpenAPI HTML
+        run: |
+          mkdir -p _site
+          redocly build-docs spec/openapi.yaml \
+            --output _site/index.html \
+            --title "2Africa OpenAPI - v1.0.0-rc1"
+
+      - name: Stage docs Markdown alongside
+        run: |
+          if [ -d docs ]; then
+            cp -r docs _site/docs
+          fi
+          cp README.md _site/README.md || true
+          cp CHANGELOG.md _site/CHANGELOG.md || true
+          cp GOVERNANCE.md _site/GOVERNANCE.md || true
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

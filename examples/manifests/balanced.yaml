@@ -1,0 +1,66 @@
+# SPDX-FileCopyrightText: 2026 2Africa AI and OpenAPI Contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Privacy Manifest - BALANCED preset (recommended default)
+# Anonymous yields/prices/GAP records on; credit-pack stays manual.
+
+manifest_version: 1.0.0
+profile: balanced
+generated_at: '2026-05-29T14:30:00Z'
+owner_id: jane.doe@example-farm.ke
+notes: |
+  Recommended default: contribute anonymous yields/prices/GAP to
+  regional benchmarks, but never auto-share with banks. Credit-pack
+  remains a one-shot manual action.
+
+endpoints:
+  yields:
+    enabled: true
+    allow_fields:
+      - records[].record_id
+      - records[].crop_code
+      - records[].region_code
+      - records[].harvest_date
+      - records[].quantity.quantity
+      - records[].quantity.unit
+    region_floor: subdivision
+    retention_days: 365
+    rate_limit_per_hour: 100
+
+  prices:
+    enabled: true
+    allow_fields:
+      - records[].record_id
+      - records[].sku_code
+      - records[].region_code
+      - records[].sold_on
+      - records[].unit_price.amount
+      - records[].unit_price.currency
+      - records[].per_unit
+    region_floor: subdivision
+    retention_days: 365
+    rate_limit_per_hour: 100
+
+  gap_records:
+    enabled: true
+    allow_fields:
+      - records[].record_id
+      - records[].audit_date
+      - records[].scheme
+      - records[].result
+      - records[].non_conformities
+      - records[].region_code
+    region_floor: subdivision
+    retention_days: 1825   # 5 years for certification audits
+    rate_limit_per_hour: 20
+
+  telemetry:
+    enabled: true
+    allow_fields:
+      - events[].event
+      - events[].occurred_at
+      - events[].sdk_version
+      - events[].os
+    region_floor: country
+    retention_days: 90
+    rate_limit_per_hour: 60
